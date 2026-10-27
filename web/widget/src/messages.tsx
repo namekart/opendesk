@@ -141,6 +141,10 @@ export function FileView({ a }: { a: Attachment }) {
 
 export type Offer = "idle" | "pending" | "failed" | null;
 
+// namekart: the "Talk to a person" button is hidden. Visitors still reach the team by asking
+// for a person in words, through a suggestion, or when the agent hands the conversation over.
+const SHOW_HANDOFF_BUTTON = false;
+
 export function AiMessage({
   c,
   m,
@@ -180,7 +184,7 @@ export function AiMessage({
         </div>
       )}
       {m.ai_action && convId && <ActionCard a={m.ai_action} ui={action} onDecide={(d) => void c.decide(convId, m.ai_action!, d)} />}
-      {offer && (
+      {SHOW_HANDOFF_BUTTON && offer && (
         <div class="offer">
           <button class="handoff" disabled={offer === "pending"} aria-busy={offer === "pending"} onClick={() => convId && void c.handoff(convId)}>
             {offer === "pending" ? <Spinner /> : Person()}
