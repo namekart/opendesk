@@ -261,6 +261,16 @@ func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (
 		turns = append(turns, ChatTurn{Role: "user", Results: results})
 	}
 	res.Text = TidyReply(strings.TrimSpace(text.String()))
+	if res.Handoff && in.email == nil && res.Text == "" {
+		msg := "A person from the team will follow up with you here shortly."
+		if h := strings.TrimSpace(in.bot.Personality.HandoffMessage); h != "" {
+			msg = h
+		}
+		res.Text = msg
+		if ev.delta != nil {
+			ev.delta(msg)
+		}
+	}
 	return res, nil
 }
 

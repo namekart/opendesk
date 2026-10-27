@@ -402,6 +402,13 @@ func (s *Service) postReply(ctx context.Context, in agentInput, trigger uuid.UUI
 	if body == "" && res.Action != nil && res.Action.Summary != "" {
 		body = hd.SanitizeRich("<p>" + html.EscapeString(res.Action.Summary) + "</p>")
 	}
+	if body == "" && res.Handoff && in.email == nil {
+		msg := "A person from the team will follow up with you here shortly."
+		if h := strings.TrimSpace(in.bot.Personality.HandoffMessage); h != "" {
+			msg = h
+		}
+		body = hd.SanitizeRich("<p>" + html.EscapeString(msg) + "</p>")
+	}
 	var messageID, actionID *uuid.UUID
 	err := s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 		// Re-check under the ticket lock that nothing changed while the model ran.
