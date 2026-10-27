@@ -34,6 +34,8 @@ const typingReply = (ticket: string): LiveReply => ({
 });
 
 const DEFAULT_BOT = readBot(null);
+// namekart: <script data-tickets-url="/tickets"> adds an "All tickets" link to the conversations card.
+const TICKETS_URL = document.querySelector<HTMLScriptElement>("script[data-tickets-url]")?.dataset.ticketsUrl || null;
 const botOf = (cfg: WidgetConfig | null): BotIdentity => cfg?.bot ?? DEFAULT_BOT;
 const titleOf = (cfg: WidgetConfig | null) => cfg?.title || cfg?.brand?.name || cfg?.workspace_name || t("support");
 const subtitleOf = (cfg: WidgetConfig | null) => cfg?.subtitle || (cfg?.ai_answers ? t("replyTimeAi", { name: botOf(cfg).name }) : t("replyTime"));
@@ -296,7 +298,14 @@ function Home({ c }: { c: Controller }) {
             )
           ) : convs.length > 0 ? (
             <div class="card">
-              <div class="card-h">{t("yourConversations")}</div>
+              <div class="card-h">
+                {t("yourConversations")}
+                {TICKETS_URL && (
+                  <a class="card-h-link" href={TICKETS_URL} target="_top">
+                    {t("allTickets")}
+                  </a>
+                )}
+              </div>
               {convs.slice(0, 6).map((v) => (
                 <button key={v.id} class="conv" onClick={() => void c.openConversation(v.id)}>
                   <span class={`dot${v.status === "solved" || v.status === "closed" ? "" : " open"}`} aria-hidden="true" />

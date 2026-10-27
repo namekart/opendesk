@@ -147,6 +147,9 @@ img { display: block; }
 .card { border: 1px solid var(--line); border-radius: var(--r-card, 10px); background: var(--bg); overflow: hidden; animation: rise .22s .06s var(--ease) both; }
 .card-h { padding: 12px 14px 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--fg-4); }
 .conv { width: 100%; display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; text-align: start; border-top: 1px solid var(--line); transition: background .12s; }
+.card-h:has(.card-h-link) { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.card-h-link { color: var(--fg); text-decoration: none; font-weight: 600; }
+.card-h-link:hover { text-decoration: underline; }
 .card-h + .conv { border-top: 0; }
 .conv:hover { background: var(--bg-3); }
 .conv-main { flex: 1; min-width: 0; }
