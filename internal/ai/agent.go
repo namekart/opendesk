@@ -232,7 +232,7 @@ func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (
 					ev.sources(res.Passages)
 				}
 				results = append(results, ToolResult{CallID: call.ID, Content: renderPassages(more, start)})
-			case sp.tool.Confirm || !sp.tool.ReadOnly || in.playground:
+			case sp.tool.Confirm || (in.playground && !sp.tool.ReadOnly):
 				args, summary := splitSummary(call.Input)
 				if summary == "" {
 					summary = "Run " + sp.tool.displayName()
