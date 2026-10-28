@@ -166,6 +166,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger) (*deps.Dep
 			river.QueueDefault: {MaxWorkers: 20},
 			jobs.QueueEmail:    {MaxWorkers: 20},
 			jobs.QueueWebhooks: {MaxWorkers: 20},
+			jobs.QueueAI:       {MaxWorkers: 15},
 		}
 		rc.PeriodicJobs = periodic
 	}
