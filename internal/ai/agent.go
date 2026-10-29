@@ -234,6 +234,9 @@ func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (
 				results = append(results, ToolResult{CallID: call.ID, Content: renderPassages(more, start)})
 			case sp.tool.Confirm || (in.playground && !sp.tool.ReadOnly):
 				args, summary := splitSummary(call.Input)
+				if summary == "" {
+					summary = "Run " + sp.tool.displayName()
+				}
 				res.Action = &agentAction{Tool: sp.tool, Args: args, Summary: summary}
 				stop = true
 				results = append(results, ToolResult{CallID: call.ID, Content: "Waiting for the visitor to confirm."})

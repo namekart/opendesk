@@ -9,6 +9,7 @@ const (
 	QueueDefault  = "default"
 	QueueEmail    = "email"
 	QueueWebhooks = "webhooks"
+	QueueAI       = "ai"
 )
 
 // SendMessageArgs sends an outbound email reply (messages.delivery_status = pending). Owner: email.
