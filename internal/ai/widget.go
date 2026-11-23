@@ -190,7 +190,12 @@ func (s *Service) WidgetAnswer(ctx context.Context, a jobs.AIWidgetAnswerArgs) e
 		return nil // the visitor wrote again (that job replies) or someone replied
 	}
 	if ac.replies >= max(ac.set.WidgetMaxReplies, 1) {
-		return s.handoff(ctx, a.WorkspaceID, a.TicketID, a.MessageID, handoffBot(ac.bot))
+		// Hand off with the handoff line, not in silence, so the visitor knows a person takes over.
+		_, _, err := s.postReply(ctx, ac.input(a.WorkspaceID, a.TicketID, a.PageURL), a.MessageID, agentResult{Handoff: true})
+		if errors.Is(err, errStale) {
+			return nil
+		}
+		return err
 	}
 	if capped, err := s.agentCapped(ctx, a.WorkspaceID, ac.set); err != nil || capped {
 		if capped {
