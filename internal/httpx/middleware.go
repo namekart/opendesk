@@ -204,6 +204,9 @@ func ClientIP(trustProxy bool, hops int) func(*http.Request) string {
 			if ip := r.Header.Get("CF-Connecting-IP"); net.ParseIP(ip) != nil {
 				return ip
 			}
+			if ip := r.Header.Get("X-Real-IP"); net.ParseIP(ip) != nil {
+				return ip
+			}
 			if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 				first, _, _ := strings.Cut(xff, ",")
 				if ip := strings.TrimSpace(first); net.ParseIP(ip) != nil {
@@ -251,13 +254,25 @@ type window struct {
 	count int
 }
 
+// maxLimiterWindows bounds the in-memory window map to prevent OOM memory exhaustion.
+const maxLimiterWindows = 50000
+
+func (l *Limiter) pruneLocked(now time.Time) {
+	for k, w := range l.windows {
+		if now.Sub(w.start) > 10*time.Minute {
+			delete(l.windows, k)
+		}
+	}
+}
+
 func NewLimiter() *Limiter {
 	l := &Limiter{windows: map[string]*window{}}
 	go func() {
 		for range time.Tick(time.Minute) {
 			l.mu.Lock()
+			now := time.Now()
 			for k, w := range l.windows {
-				if time.Since(w.start) > time.Hour {
+				if now.Sub(w.start) > 10*time.Minute {
 					delete(l.windows, k)
 				}
 			}
@@ -271,6 +286,15 @@ func NewLimiter() *Limiter {
 func (l *Limiter) Allow(key string, limit int, period time.Duration) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if len(l.windows) >= maxLimiterWindows {
+		l.pruneLocked(time.Now())
+		if len(l.windows) >= maxLimiterWindows {
+			for k := range l.windows {
+				delete(l.windows, k)
+				break
+			}
+		}
+	}
 	w, ok := l.windows[key]
 	if !ok || time.Since(w.start) > period {
 		w = &window{start: time.Now()}
@@ -285,6 +309,15 @@ func (l *Limiter) Allow(key string, limit int, period time.Duration) bool {
 func (l *Limiter) Take(key string, limit int, period time.Duration) (ok bool, remaining int, reset time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if len(l.windows) >= maxLimiterWindows {
+		l.pruneLocked(time.Now())
+		if len(l.windows) >= maxLimiterWindows {
+			for k := range l.windows {
+				delete(l.windows, k)
+				break
+			}
+		}
+	}
 	w, found := l.windows[key]
 	if !found || time.Since(w.start) > period {
 		w = &window{start: time.Now()}

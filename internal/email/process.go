@@ -546,11 +546,12 @@ func newToConversation(ctx context.Context, tx pgx.Tx, wid, ticketID uuid.UUID, 
 
 func (s *service) storeAttachments(ctx context.Context, wid uuid.UUID, pm *parsedMail) ([]preparedAttachment, error) {
 	var out []preparedAttachment
+	var totalBytes int64
 	for _, p := range pm.Parts {
 		if len(out) >= maxAttachments {
 			break
 		}
-		if len(p.Content) > maxAttachmentBytes {
+		if len(p.Content) > maxAttachmentBytes || totalBytes+int64(len(p.Content)) > maxTotalAttachmentBytes {
 			continue
 		}
 		ct := strings.ToLower(p.ContentType)
@@ -568,6 +569,7 @@ func (s *service) storeAttachments(ctx context.Context, wid uuid.UUID, pm *parse
 			s.deleteAttachmentObjects(out)
 			return nil, err
 		}
+		totalBytes += a.size
 		out = append(out, a)
 	}
 	return out, nil

@@ -278,11 +278,17 @@ func (c *call) resolveModel(ctx context.Context, requested string) string {
 // run reserves and calls the model; onDelta non-nil streams.
 func (c *call) run(ctx context.Context, req Request, onDelta func(string)) (Response, error) {
 	req.Model = c.resolveModel(ctx, req.Model)
+	est := c.s.estimate(ctx, c.feature, req.Model, requestTokens(req), req.MaxTokens)
 	if err := c.reserve(ctx, req.Model, requestTokens(req), req.MaxTokens); err != nil {
 		return Response{}, err
 	}
-	rt := c.rt
 	var err error
+	defer func() {
+		if err != nil && c.s.d.Plan != nil {
+			c.s.d.Plan.Release(c.wid, est)
+		}
+	}()
+	rt := c.rt
 	start := time.Now()
 	if onDelta != nil {
 		c.resp, err = rt.p.Stream(ctx, req, onDelta)

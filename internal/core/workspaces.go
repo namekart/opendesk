@@ -382,6 +382,84 @@ func (s *svc) createWorkspace(ctx context.Context, tx pgx.Tx, p *auth.Principal,
 		VALUES ($1, $2, 'Default', NULL, 240, 2880, true, 0)`, ids.New(), wid); err != nil {
 		return CoreWorkspace{}, err
 	}
+	defaultAutomations := []struct {
+		name       string
+		trigger    string
+		conditions []map[string]string
+		actions    []map[string]string
+	}{
+		{
+			name:    "Auto-close out-of-office and bounce notifications",
+			trigger: "ticket_created",
+			conditions: []map[string]string{
+				{"field": "subject", "op": "any", "value": "out of office\nautomatic reply\nauto-reply\nundeliverable\ndelivery status notification\nfailure notice"},
+			},
+			actions: []map[string]string{
+				{"type": "set_status", "value": "closed"},
+				{"type": "add_tag", "value": "notification"},
+			},
+		},
+		{
+			name:    "Prevent courtesy replies from reopening solved tickets",
+			trigger: "customer_replied",
+			conditions: []map[string]string{
+				{"field": "status", "op": "equals", "value": "solved"},
+				{"field": "body", "op": "any", "value": "thank you\nthanks!\nthanks so much\nappreciated\nthank you so much\nall good now"},
+			},
+			actions: []map[string]string{
+				{"type": "set_status", "value": "solved"},
+				{"type": "add_tag", "value": "courtesy-reply"},
+			},
+		},
+		{
+			name:    "Auto-triage and prioritize billing & refund requests",
+			trigger: "ticket_created",
+			conditions: []map[string]string{
+				{"field": "subject", "op": "any", "value": "refund\ninvoice\nbilling\ncharge\nsubscription\npayment failed"},
+			},
+			actions: []map[string]string{
+				{"type": "add_tag", "value": "Billing"},
+				{"type": "set_priority", "value": "high"},
+			},
+		},
+		{
+			name:    "Auto-triage and prioritize bug & crash reports",
+			trigger: "ticket_created",
+			conditions: []map[string]string{
+				{"field": "subject", "op": "any", "value": "crash\nfatal error\nbug\nbroken\n500 internal server error\nexception"},
+			},
+			actions: []map[string]string{
+				{"type": "add_tag", "value": "Bug"},
+				{"type": "set_priority", "value": "urgent"},
+			},
+		},
+		{
+			name:    "Auto-tag and deprioritize automated no-reply senders",
+			trigger: "ticket_created",
+			conditions: []map[string]string{
+				{"field": "from_email", "op": "any", "value": "no-reply@\nnoreply@\nmailer-daemon@\nnotifications@"},
+			},
+			actions: []map[string]string{
+				{"type": "add_tag", "value": "notification"},
+				{"type": "set_priority", "value": "low"},
+			},
+		},
+	}
+	for i, a := range defaultAutomations {
+		conds, err := json.Marshal(a.conditions)
+		if err != nil {
+			return CoreWorkspace{}, err
+		}
+		acts, err := json.Marshal(a.actions)
+		if err != nil {
+			return CoreWorkspace{}, err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO automations (id, workspace_id, name, trigger, conditions, actions, enabled, position)
+			VALUES ($1, $2, $3, $4, $5, $6, true, $7)`,
+			ids.New(), wid, a.name, a.trigger, conds, acts, i); err != nil {
+			return CoreWorkspace{}, err
+		}
+	}
 	if err := audit.Log(ctx, tx, p, wid, "workspace.created", "workspace", &wid, map[string]any{"name": name}); err != nil {
 		return CoreWorkspace{}, err
 	}

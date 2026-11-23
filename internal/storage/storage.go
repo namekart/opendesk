@@ -56,7 +56,13 @@ func New(ctx context.Context, o Options) (Storage, error) {
 
 // validKey refuses traversal; keys are generated server-side but this is the backstop.
 func validKey(key string) error {
-	if key == "" || strings.Contains(key, "..") || strings.HasPrefix(key, "/") {
+	if key == "" || strings.Contains(key, "..") || strings.HasPrefix(key, "/") || strings.HasPrefix(key, "\\") {
+		return errors.New("storage: invalid key")
+	}
+	if len(key) >= 2 && key[1] == ':' {
+		return errors.New("storage: invalid key")
+	}
+	if filepath.IsAbs(filepath.FromSlash(key)) {
 		return errors.New("storage: invalid key")
 	}
 	return nil
@@ -64,13 +70,23 @@ func validKey(key string) error {
 
 type local struct{ dir string }
 
-func (l *local) path(key string) string { return filepath.Join(l.dir, filepath.FromSlash(key)) }
+func (l *local) path(key string) (string, error) {
+	p := filepath.Clean(filepath.Join(l.dir, filepath.FromSlash(key)))
+	rel, err := filepath.Rel(l.dir, p)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", errors.New("storage: invalid key traversal")
+	}
+	return p, nil
+}
 
 func (l *local) Put(_ context.Context, key string, r io.Reader, _ int64, _ string) error {
 	if err := validKey(key); err != nil {
 		return err
 	}
-	p := l.path(key)
+	p, err := l.path(key)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
 		return err
 	}
@@ -94,7 +110,11 @@ func (l *local) Get(_ context.Context, key string) (io.ReadCloser, error) {
 	if err := validKey(key); err != nil {
 		return nil, err
 	}
-	f, err := os.Open(l.path(key))
+	p, err := l.path(key)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(p)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, ErrNotFound
 	}
@@ -105,7 +125,11 @@ func (l *local) Delete(_ context.Context, key string) error {
 	if err := validKey(key); err != nil {
 		return err
 	}
-	err := os.Remove(l.path(key))
+	p, err := l.path(key)
+	if err != nil {
+		return err
+	}
+	err = os.Remove(p)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}

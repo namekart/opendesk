@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -175,6 +176,10 @@ type Service struct {
 	// (billing: auto-recharge and running-low notices). It runs after the charge commits
 	// and never fails the call.
 	OnSpend func(ctx context.Context, wid uuid.UUID, before, after Micro)
+
+	inFlightMu    sync.Mutex
+	inFlight      map[uuid.UUID]Micro
+	inFlightCount map[uuid.UUID]int
 }
 
 func (s *Service) enabled() bool { return s != nil && s.Billing }
@@ -515,17 +520,60 @@ func (s *Service) markup() float64 {
 	return s.Markup
 }
 
+// MaxConcurrentAICallsPerWorkspace is the concurrency cap for simultaneous AI requests per workspace.
+const MaxConcurrentAICallsPerWorkspace = 10
+
 // Reserve checks that a call can start before the model is called: the balance must
-// cover the call's estimate, and never less than MinBalance. It does not spend.
+// cover the call's estimate plus any in-flight requests, and never less than MinBalance.
+// It tracks in-flight reservations to prevent concurrent overspend races.
 func (s *Service) Reserve(ctx context.Context, q db.Querier, wid uuid.UUID, estimate Micro) error {
 	c, err := s.Balance(ctx, q, wid)
 	if err != nil {
 		return err
 	}
-	if !c.Unlimited && c.Remaining < max(estimate, MinBalance) {
-		return ErrNoBalance
+	if !c.Unlimited {
+		s.inFlightMu.Lock()
+		if s.inFlight == nil {
+			s.inFlight = make(map[uuid.UUID]Micro)
+			s.inFlightCount = make(map[uuid.UUID]int)
+		}
+		if s.inFlightCount[wid] >= MaxConcurrentAICallsPerWorkspace {
+			s.inFlightMu.Unlock()
+			return ErrNoBalance
+		}
+		needed := max(estimate, MinBalance)
+		pending := s.inFlight[wid]
+		if c.Remaining < pending+needed {
+			s.inFlightMu.Unlock()
+			return ErrNoBalance
+		}
+		s.inFlight[wid] += needed
+		s.inFlightCount[wid]++
+		s.inFlightMu.Unlock()
 	}
 	return nil
+}
+
+// Release releases an in-flight reservation (e.g. on call completion or failure).
+func (s *Service) Release(wid uuid.UUID, estimate Micro) {
+	if s == nil {
+		return
+	}
+	s.inFlightMu.Lock()
+	defer s.inFlightMu.Unlock()
+	if s.inFlight != nil {
+		held := max(estimate, MinBalance)
+		if s.inFlight[wid] > held {
+			s.inFlight[wid] -= held
+		} else {
+			delete(s.inFlight, wid)
+		}
+		if s.inFlightCount[wid] > 1 {
+			s.inFlightCount[wid]--
+		} else {
+			delete(s.inFlightCount, wid)
+		}
+	}
 }
 
 // Spend charges a completed AI call on its real cost: the monthly allowance first, then
@@ -534,6 +582,9 @@ func (s *Service) Reserve(ctx context.Context, q db.Querier, wid uuid.UUID, esti
 // was charged. A call on the workspace's own key (u.OwnKey) is recorded and charges 0;
 // callers skip Reserve for it, since no balance is needed.
 func (s *Service) Spend(ctx context.Context, pool db.Querier, wid uuid.UUID, u Usage) (Micro, error) {
+	if s != nil {
+		defer s.Release(wid, MinBalance)
+	}
 	cost, err := s.Charge(u)
 	if err != nil {
 		return 0, err
