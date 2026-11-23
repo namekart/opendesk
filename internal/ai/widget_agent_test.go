@@ -247,7 +247,7 @@ func TestWidgetAgent(t *testing.T) {
 	e.Do("POST", "/v1/widget/conversations/"+tid8.String()+"/messages", va8, map[string]any{"body": "And on mobile?"}).Want(t, 201)
 	before = e.F.calls()
 	e.runWidgetJobs()
-	if got := e.loadTicket(tid8); e.F.calls() != before || got.Custom["ai_handoff"] != true {
+	if got := e.loadTicket(tid8); e.F.calls() != before || got.Custom["ai_handoff"] != true || !strings.Contains(lastMessage(e, tid8).BodyText, "person from the team") {
 		t.Fatalf("max replies %+v", got.Custom)
 	}
 	e.settings(map[string]any{"widget_max_replies": 20})
