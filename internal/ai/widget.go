@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"html"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -28,9 +27,6 @@ import (
 // visitor actions and the monthly cap. The model loop is in agent.go.
 
 func isNoBalance(err error) bool { return errors.Is(err, plan.ErrNoBalance) }
-
-// wantsPerson spots a request for a human in common languages without a model call.
-var wantsPerson = regexp.MustCompile(`(?i)\b(human|real person|a person|live agent|an agent|representative|operator|someone real|talk to (?:someone|support|a person)|speak (?:to|with) (?:someone|a person|an agent)|mensch|mitarbeiter|humain|une personne|conseiller|humano|una persona|persona real|agente|operatore|atendente|uma pessoa|medewerker|człowiek|konsultant)\b`)
 
 // Agent features: what the monthly agent cap counts.
 var agentFeatures = []string{"answer", "answer_check", "answer_email"}
@@ -194,9 +190,6 @@ func (s *Service) WidgetAnswer(ctx context.Context, a jobs.AIWidgetAnswerArgs) e
 		return nil // the visitor wrote again (that job replies) or someone replied
 	}
 	if ac.replies >= max(ac.set.WidgetMaxReplies, 1) {
-		return s.handoff(ctx, a.WorkspaceID, a.TicketID, a.MessageID, handoffBot(ac.bot))
-	}
-	if wantsPerson.MatchString(messageText(last)) {
 		return s.handoff(ctx, a.WorkspaceID, a.TicketID, a.MessageID, handoffBot(ac.bot))
 	}
 	if capped, err := s.agentCapped(ctx, a.WorkspaceID, ac.set); err != nil || capped {

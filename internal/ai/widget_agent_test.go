@@ -224,11 +224,11 @@ func TestWidgetAgent(t *testing.T) {
 		t.Fatalf("handoff %+v", got.Custom)
 	}
 
-	// Asking for a person hands off without a model call.
-	before := e.F.calls()
+	// Asking for a person hands off with a reply informing the visitor.
+	e.F.queue("widget", "A person from the team will reply here.\n@tool handoff_to_human {\"reason\":\"visitor_requested\"}")
 	_, tid6, _ := widgetConversation(e, "I want to talk to a real person please")
 	e.runWidgetJobs()
-	if got := e.loadTicket(tid6); e.F.calls() != before || got.Custom["ai_handoff"] != true || len(publicMessages(e, tid6)) != 1 {
+	if got := e.loadTicket(tid6); got.Custom["ai_handoff"] != true || len(publicMessages(e, tid6)) != 2 || !strings.Contains(lastMessage(e, tid6).BodyText, "person from the team") {
 		t.Fatalf("%+v", got.Custom)
 	}
 
